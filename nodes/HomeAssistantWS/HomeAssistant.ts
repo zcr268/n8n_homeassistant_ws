@@ -79,32 +79,30 @@ export class HomeAssistant extends EventEmitter {
 			start_time: startTime
 		}
 
-		if(endTime){
+		if (endTime) {
 			params.end_time = endTime
 		}
 
-		if(deviceIds){
+		if (deviceIds) {
 			params.device_ids = deviceIds
 		}
 
-		if(entityIds){
+		if (entityIds) {
 			params.entity_ids = entityIds
 		}
 
-		if(contextId){
+		if (contextId) {
 			params.context_id = contextId
 		}
 
-		const id = this.cmd.get();
-		return this.send_with_single_response(id, 'logbook/get_events', (data: any) => {
+		return this.send_with_single_response('logbook/get_events', (data: any) => {
 			return Promise.resolve(data as any[])
 		}, params)
 	}
 
 	get_service_domains(): Promise<string[]> {
-		const id = this.cmd.get();
 
-		const promise = this.send_with_single_response(id, "get_services", (data: any) => {
+		const promise = this.send_with_single_response("get_services", (data: any) => {
 			const options: string[] = [];
 			for (let k in data) {
 				options.push(k)
@@ -126,7 +124,7 @@ export class HomeAssistant extends EventEmitter {
 
 		return this.get_all_devices().then(devices => {
 
-			return this.send_with_single_response(this.cmd.get(), 'config/entity_registry/list', (data: any) => {
+			return this.send_with_single_response('config/entity_registry/list', (data: any) => {
 				const result = (data as any[])
 					.map(item => {
 						const entity = Entity.fromJSON(item)
@@ -156,33 +154,32 @@ export class HomeAssistant extends EventEmitter {
 	}
 
 	get_states(resolve: boolean = false): Promise<State[]> {
-		const id = this.cmd.get();
 
 
-			return this.send_with_single_response(id, 'get_states', (data: any) => {
+		return this.send_with_single_response('get_states', (data: any) => {
 
-				let resolving: Promise<Entity[]>
-				if(resolve){
-					resolving = this.get_all_entities()
-				} else{
-					resolving = Promise.resolve([])
-				}
+			let resolving: Promise<Entity[]>
+			if (resolve) {
+				resolving = this.get_all_entities()
+			} else {
+				resolving = Promise.resolve([])
+			}
 
-				return resolving.then(entities => {
-					const resolvedData = (data as any[])
-						.map(item => State.fromJSON(item))
-						.map(item => {
-							if (resolve) {
-								return this.resolve_state(item, entities)
-							} else {
-								return item
-							}
-						})
-						return Promise.resolve(resolvedData)
-				})
-
-
+			return resolving.then(entities => {
+				const resolvedData = (data as any[])
+					.map(item => State.fromJSON(item))
+					.map(item => {
+						if (resolve) {
+							return this.resolve_state(item, entities)
+						} else {
+							return item
+						}
+					})
+				return Promise.resolve(resolvedData)
 			})
+
+
+		})
 
 	}
 
@@ -190,16 +187,77 @@ export class HomeAssistant extends EventEmitter {
 		return this.get_system_config().then(config => config.components)
 	}
 
-	get_system_config(): Promise<Config> {
-		const id = this.cmd.get();
-		return this.send_with_single_response(id, 'get_config', (data: any) => {
+	get_system_config(unsafe?: boolean): Promise<Config> {
+		return this.send_with_single_response('get_config', (data: any) => {
 			return Promise.resolve(Config.fromJSON(data))
-		})
+		}, undefined, unsafe)
+	}
+
+	/**
+	 * Wait for Home Assistant to be fully started and ready.
+	 * Checks config.state === "running", if not waits for homeassistant_started event.
+	 * @param timeout - Maximum time to wait in milliseconds (default 10000ms)
+	 * @throws Error if timeout is reached or config check fails
+	 */
+	async waitForReady(timeout = 10000): Promise<void> {
+		const config = await this.get_system_config(true);
+
+		//if (config.components.indexOf("automation") > -1) {
+		if (config.state.trim().toUpperCase() === 'RUNNING') {
+			this.logger.info('Automation is ready');
+			return;
+		}
+
+		this.logger.info(`Home Assistant not ready yet (state: ${config.state}), waiting for homeassistant_started event...`);
+
+		return new Promise<void>((resolve, reject) => {
+			let resolved = false;
+			let eventEmitter: EventEmitter | undefined;
+
+			const cleanup = () => {
+				if (eventEmitter) {
+					eventEmitter.removeAllListeners();
+				}
+			};
+
+			const done = (error?: Error) => {
+				if (!resolved) {
+					resolved = true;
+					cleanup();
+					if (error) {
+						reject(error);
+					} else {
+						resolve();
+					}
+				}
+			};
+
+			// Set up timeout
+			const timeoutId = setTimeout(() => {
+				this.logger.error(`Timeout waiting for Home Assistant to be ready after ${timeout}ms`);
+				done(new Error(`Home Assistant not ready after ${timeout}ms`));
+			}, timeout);
+
+			// Subscribe to homeassistant_started event
+			this.subscribe_events('homeassistant_started', true).then(emitter => {
+				eventEmitter = emitter;
+				emitter.on('event', (x, id) => {
+					this.logger.info(`Received homeassistant_started event, Home Assistant is ready: ${JSON.stringify(x)}`);
+					clearTimeout(timeoutId);
+					this.unsubscribe_events(id)
+					setTimeout(done, 10000)
+					//done();
+				});
+			}).catch(error => {
+				this.logger.error('Failed to subscribe to homeassistant_started event:', error);
+				clearTimeout(timeoutId);
+				done(error);
+			});
+		});
 	}
 
 	get_all_devices(): Promise<Device[]> {
-		const id = this.cmd.get();
-		return this.send_with_single_response(id, 'config/device_registry/list', (data: any) => {
+		return this.send_with_single_response('config/device_registry/list', (data: any) => {
 			return Promise.resolve((data as any[])
 				.map(item => Device.fromJSON(item)))
 		})
@@ -214,23 +272,20 @@ export class HomeAssistant extends EventEmitter {
 	}
 
 	get_categories(scope: string): Promise<any[]> {
-		const id = this.cmd.get();
-		return this.send_with_single_response(id, 'config/category_registry/list', (data: any) => {
+		return this.send_with_single_response('config/category_registry/list', (data: any) => {
 			return Promise.resolve(data)
 		}, { scope: scope })
 	}
 
 	get_areas(): Promise<Area[]> {
-		const id = this.cmd.get();
-		return this.send_with_single_response(id, 'config/area_registry/list', (data: any) => {
+		return this.send_with_single_response('config/area_registry/list', (data: any) => {
 			return Promise.resolve((data as any[])
 				.map(item => Area.fromJSON(item)))
 		})
 	}
 
 	get_triggers_for_device(deviceId: string): Promise<Trigger[]> {
-		const id = this.cmd.get();
-		return this.send_with_single_response(id, 'device_automation/trigger/list', (data: any) => {
+		return this.send_with_single_response('device_automation/trigger/list', (data: any) => {
 			return Promise.resolve((data as any[])
 				.map(item => Trigger.fromJSON(item)))
 		}, { device_id: deviceId })
@@ -243,54 +298,87 @@ export class HomeAssistant extends EventEmitter {
 	async subscribe_trigger(device_id: string, trigger: string[]): Promise<EventEmitter> {
 		const triggers = await this.get_triggers_for_device(device_id)
 
+		this.logger.info(`subscribe_trigger: got ${triggers.length} triggers from HA, filtering by ${trigger.length} selected IDs`);
+		this.logger.debug(`subscribe_trigger: selected IDs: ${JSON.stringify(trigger)}`);
+		this.logger.debug(`subscribe_trigger: available IDs: ${JSON.stringify(triggers.map(t => t.getId()))}`);
+
 		const triggerArray = triggers.filter((t: Trigger) => trigger.includes(t.getId()));
-		return this.subscribe_trigger_mapped(device_id, triggerArray)
+
+		this.logger.info(`subscribe_trigger: ${triggerArray.length} triggers after filtering`);
+
+		if (triggerArray.length <= 0) {
+			return Promise.reject("trigger not found")
+		} else {
+			return this.subscribe_trigger_mapped(device_id, triggerArray)
+		}
 	}
 
+	unsubscribe_events(subscription_id: number, unsafe?: boolean) {
+		let eventualId: Promise<number>
+		if (unsafe) {
+			eventualId = Promise.resolve(this.cmd.get())
+		} else {
+			eventualId = this.ws.then(_ => this.cmd.get())
+		}
 
-	subscribe_generic(type: string, params: any): Promise<EventEmitter> {
-		const emitter = new EventEmitter();
-		const id = this.cmd.get();
-		this.callbacks.set(id, (type: MessageType, data: any) => {
-
-			if (type == MessageType.RESULT) {
-				if (!data['success']) {
-					emitter.emit('error', data['error'])
-					this.callbacks.delete(id)
-				}else{
-					emitter.emit(MessageType.RESULT, data['result']);
-				}
-
-			} else if (type == MessageType.EVENT) {
-				emitter.emit(MessageType.EVENT, data['event']);
-			}else if (type == MessageType.ERROR || type == MessageType.RESULT_WITH_ERROR) {
-				emitter.emit(MessageType.ERROR, data);
-			}
-		});
-
-		return this.send(id, type, params).then(() => {
-			return emitter
+		return eventualId.then(nextId => {
+			return this.send(nextId, "unsubscribe_events", { "subscription": subscription_id }, unsafe)
 		})
 	}
 
-	subscribe_events(type: string): Promise<EventEmitter> {
-		return this.subscribe_generic("subscribe_events", { event_type: type })
+	subscribe_generic(type: string, params: any, unsafe?: boolean): Promise<EventEmitter> {
+		const emitter = new EventEmitter();
+
+		let eventualId: Promise<number>
+		if (unsafe) {
+			eventualId = Promise.resolve(this.cmd.get())
+		} else {
+			eventualId = this.ws.then(_ => this.cmd.get())
+		}
+
+		return eventualId.then(id => {
+
+			this.callbacks.set(id, (type: MessageType, data: any) => {
+
+				if (type == MessageType.RESULT) {
+					if (!data['success']) {
+						emitter.emit('error', data['error'], id)
+						this.callbacks.delete(id)
+					} else {
+						emitter.emit(MessageType.RESULT, data['result'], id);
+					}
+
+				} else if (type == MessageType.EVENT) {
+					emitter.emit(MessageType.EVENT, data['event'], id);
+				} else if (type == MessageType.ERROR || type == MessageType.RESULT_WITH_ERROR) {
+					emitter.emit(MessageType.ERROR, data, id);
+				}
+			});
+
+			return this.send(id, type, params, unsafe).then(() => {
+				return emitter
+			})
+
+		})
+	}
+
+	subscribe_events(type: string, unsafe?: boolean): Promise<EventEmitter> {
+		return this.subscribe_generic("subscribe_events", { event_type: type }, unsafe)
 	}
 
 	call_service(domain: string, service: string, attributes: any, response: boolean): Promise<any> {
-		const id = this.cmd.get();
 
-			return this.send_with_single_response(id, 'call_service', (data: any) => {
-				return Promise.resolve(data)
-			}, {
-				domain: domain,
-				service: service,
-				service_data: attributes,
-				return_response: response
-			})
+		return this.send_with_single_response('call_service', (data: any) => {
+			return Promise.resolve(data)
+		}, {
+			domain: domain,
+			service: service,
+			service_data: attributes,
+			return_response: response
+		})
 	}
 
-	get_service_action(domain: string, service: string): Promise<ServiceAction|undefined> {
+	get_service_action(domain: string, service: string): Promise<ServiceAction | undefined> {
 		return this.get_service_actions(domain).then(calls => {
 			const call = calls.find(c => c.id == service);
 			return Promise.resolve(call);
@@ -298,8 +386,7 @@ export class HomeAssistant extends EventEmitter {
 	}
 
 	get_service_actions(domain?: string): Promise<ServiceAction[]> {
-		const id = this.cmd.get();
-		const services = this.send_with_single_response(id, "get_services", (services: any) => {
+		const services = this.send_with_single_response("get_services", (services: any) => {
 			const options: any[] = [];
 			for (let k in services) {
 				if (!domain || domain.trim() === '' || k == domain) {
@@ -338,17 +425,28 @@ export class HomeAssistant extends EventEmitter {
 					access_token: this.apiKey,
 				}));
 			} else if (data['type'] == 'auth_ok') {
-				// Reset reconnection attempts on successful connection
-				this.reconnectAttempts = 0;
 				this.isReconnecting = false;
 
-				socket.ready();
-				this.emit('connected');
-				// Start ping-pong mechanism
-				this.startPingPong();
+
+				// Wait for HA to be fully started before emitting 'connected'
+				this.waitForReady().then(() => {
+					// Only reset reconnection attempts after HA is fully ready
+					this.reconnectAttempts = 0;
+					this.emit('connected');
+					// Start ping-pong mechanism
+					this.startPingPong();
+					// Mark socket as ready so we can send commands
+					socket.ready();
+				}).catch(error => {
+					this.logger.error('Home Assistant not ready, closing connection to retry:', error);
+					this.emit('error', data);
+					socket.error(error)
+					ws.close();
+				});
 			} else if (data['type'] == 'auth_invalid') {
-				this.logger.error('WebSocket error', data);
+				this.logger.error('authentication invalid', data);
 				socket.error(data.message)
+				this.emit('error', data);
 			} else if (data['type'] == 'pong') {
 				// Handle pong response
 				this.handlePongReceived(data);
@@ -365,17 +463,23 @@ export class HomeAssistant extends EventEmitter {
 
 		ws.on('error', (error: any) => {
 			this.logger.error('WebSocket error', error);
-			this.emit('error', error);
+			// Don't emit error during reconnection - we'll keep trying
+			// Error will be reported if reconnection ultimately fails
+			if (!this.shouldReconnect) {
+				this.emit('error', error);
+			}
 		});
 
 		ws.on('close', (code: number, reason: Buffer) => {
 			this.logger.info(`WebSocket closed with code ${code}, reason: ${reason.toString()}`);
-			this.stopPingPong(); // Stop ping-pong when connection is lost
-			this.emit('close', code, reason.toString());
+			this.stopPingPong();
 
-			// Only attempt to reconnect if it's an unexpected close and we should reconnect
-			if (this.shouldReconnect && code !== 1000 && !this.isReconnecting) {
+			if (this.shouldReconnect) {
+				// Don't emit close - we're going to try reconnecting
 				this.attemptReconnect();
+			} else {
+				// Only emit close when we're done (intentional shutdown)
+				this.emit('close', code, reason.toString());
 			}
 		});
 
@@ -383,57 +487,80 @@ export class HomeAssistant extends EventEmitter {
 	}
 
 	send_with_response<T>(type: string, mapping: (data: any) => Promise<T>, params?: any): Promise<T> {
-		return this.send_with_single_response(this.cmd.get(), type, mapping, params)
+		return this.send_with_single_response(type, mapping, params)
 	}
 
 
-	private send_with_single_response<T>(id: number, type: string, mapping: (data: any) => Promise<T>, params?: any): Promise<T> {
-		const promise = new Promise<T>((resolve, reject) => {
-			this.callbacks.set(id, (type: MessageType, data: any) => {
-				try{
-					this.callbacks.delete(id);
-					if (type == MessageType.RESULT) {
-						const result = data['result']
-						const error = data['error']
-						if (error) {
-							reject(error);
-						} else {
-							const mappedResult = mapping(result)
-							if(mappedResult){
-								mappedResult.then(r => resolve(r))
-							}else{
-								reject(new Error("No result returned from mapping function"))
+	private send_with_single_response<T>(type: string, mapping: (data: any) => Promise<T>, params?: any, unsafe?: boolean): Promise<T> {
+
+		let eventualId: Promise<number>
+		if (unsafe) {
+			eventualId = Promise.resolve(this.cmd.get())
+		} else {
+			eventualId = this.ws.then(_ => this.cmd.get())
+		}
+
+		return eventualId.then(id => {
+
+			const promise = new Promise<T>((resolve, reject) => {
+				this.callbacks.set(id, (type: MessageType, data: any) => {
+					try {
+						this.callbacks.delete(id);
+						if (type == MessageType.RESULT) {
+							const result = data['result']
+							const error = data['error']
+							if (error) {
+								reject(error);
+							} else {
+								const mappedResult = mapping(result)
+								if (mappedResult) {
+									mappedResult.then(r => resolve(r))
+								} else {
+									reject(new Error("No result returned from mapping function"))
+								}
 							}
+						} else if (type == MessageType.ERROR) {
+							reject(data);
 						}
-					} else if (type == MessageType.ERROR) {
-						reject(data);
+					} catch (e) {
+						reject(e)
 					}
-				} catch(e){
-					reject(e)
-				}
+				});
 			});
-		});
 
-		return this.send(id, type, params).then(() => {
-			return promise
+			this.logger.info(`send with single response unsafe: ${unsafe}`)
+			return this.send(id, type, params, unsafe).then(() => {
+				return promise
+			})
+
 		})
+
 	}
 
-  send_no_response(type: string, params?: any): Promise<void> {
-    return this.send(this.cmd.get(), type, params)
-  }
+	send_no_response(type: string, params?: any): Promise<void> {
+		return this.send(this.cmd.get(), type, params)
+	}
 
-	private send(id: number, type: string, params?: any): Promise<void> {
+	private send(id: number, type: string, params?: any, unsafe?: boolean): Promise<void> {
 
 		const jsonString = JSON.stringify({
 			type: type,
 			id: id,
 			...params
 		})
-		this.logger.info(`send ${id} ${type} ${jsonString}`);
-		return this.ws.then(ws => {
-			ws.send(jsonString)
-		})
+		this.logger.info(`send ${id} ${type} ${jsonString} unsafe: ${unsafe}`);
+
+		if (unsafe) {
+			return this.ws.get_unsafe().then(ws => {
+				this.logger.info(`sending unsage message ${id}...`)
+				ws.send(jsonString)
+			})
+		} else {
+
+			return this.ws.then(ws => {
+				ws.send(jsonString)
+			})
+		}
 	}
 
 	onWebSocket(event: string, listener: (this: WebSocket, ...args: any[]) => void): Promise<WebSocket> {
@@ -454,7 +581,10 @@ export class HomeAssistant extends EventEmitter {
 
 		if (this.reconnectAttempts > this.maxReconnectAttempts) {
 			this.logger.error(`Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+			this.shouldReconnect = false;  // Prevent further attempts
+			this.isReconnecting = false;
 			this.emit('reconnect_failed');
+			this.emit('close', 1006, 'Reconnection failed');  // 1006 = abnormal closure
 			return;
 		}
 
@@ -475,6 +605,8 @@ export class HomeAssistant extends EventEmitter {
 				this.cmd.reset();
 				// Create a new connection
 				this.ws = this.get_authenticated_ws();
+				// Reset flag so close handler can trigger retry if this connection fails
+				this.isReconnecting = false;
 				this.logger.info(`Reconnection attempt ${this.reconnectAttempts} initiated`);
 			} catch (error) {
 				this.logger.error('Error during reconnection attempt:', error);
@@ -517,7 +649,7 @@ export class HomeAssistant extends EventEmitter {
 		}
 	}
 
-		private sendPing(): void {
+	private sendPing(): void {
 		const pingId = this.cmd.get();
 		const pingMessage = {
 			type: 'ping',
