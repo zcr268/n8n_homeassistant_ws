@@ -2,7 +2,7 @@
 
 type Observer<T> = (value: T) => void;
 
-export class SocketConnection<T>{
+export class SocketConnection<T> {
 	close() {
 		this.isClosed = true;
 		this.observers = [];
@@ -23,8 +23,11 @@ export class SocketConnection<T>{
 
 	}
 
+	get_unsafe(): Promise<T> {
+		return Promise.resolve(this.obj)
+	}
 
-  get(): Promise<T> {
+	get(): Promise<T> {
 
 		if (this.isReady) {
 			return Promise.resolve(this.obj)
@@ -44,6 +47,8 @@ export class SocketConnection<T>{
 	then<TResult1 = T>(observer: ((value: T) => TResult1 | PromiseLike<TResult1>)): Promise<TResult1> {
 		return this.get().then(observer)
 	}
+
+
 
 	ready() {
 		this.isReady = true;

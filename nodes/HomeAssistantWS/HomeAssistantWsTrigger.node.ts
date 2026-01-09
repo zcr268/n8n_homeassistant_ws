@@ -11,7 +11,7 @@ export class HomeAssistantWsTrigger implements INodeType {
 		icon: 'file:homeAssistantWs.svg',
 		group: ['trigger'],
 		version: 1,
-		subtitle: '={{ $parameter["operation"] + ": " + $parameter["resource"] }}',
+		subtitle: '={{ $parameter["resource"]}}',
 		description: 'Starts a Workflow on a Home Assistant Event',
 		defaults: {
 			name: 'Home Assistant WS Trigger',
@@ -116,7 +116,6 @@ export class HomeAssistantWsTrigger implements INodeType {
 		let assistant: HomeAssistant | undefined;
 		let emitter: EventEmitter | undefined;
 		let running = false;
-
 		const subscribeToEvents = async () => {
 			const resource = this.getNodeParameter('resource', null, {});
 
