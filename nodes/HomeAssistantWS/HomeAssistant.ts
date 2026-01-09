@@ -246,7 +246,6 @@ export class HomeAssistant extends EventEmitter {
 					clearTimeout(timeoutId);
 					this.unsubscribe_events(id)
 					setTimeout(done, 10000)
-					//done();
 				});
 			}).catch(error => {
 				this.logger.error('Failed to subscribe to homeassistant_started event:', error);
@@ -298,13 +297,9 @@ export class HomeAssistant extends EventEmitter {
 	async subscribe_trigger(device_id: string, trigger: string[]): Promise<EventEmitter> {
 		const triggers = await this.get_triggers_for_device(device_id)
 
-		this.logger.info(`subscribe_trigger: got ${triggers.length} triggers from HA, filtering by ${trigger.length} selected IDs`);
-		this.logger.debug(`subscribe_trigger: selected IDs: ${JSON.stringify(trigger)}`);
-		this.logger.debug(`subscribe_trigger: available IDs: ${JSON.stringify(triggers.map(t => t.getId()))}`);
 
 		const triggerArray = triggers.filter((t: Trigger) => trigger.includes(t.getId()));
 
-		this.logger.info(`subscribe_trigger: ${triggerArray.length} triggers after filtering`);
 
 		if (triggerArray.length <= 0) {
 			return Promise.reject("trigger not found")
