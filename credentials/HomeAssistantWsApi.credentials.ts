@@ -9,6 +9,22 @@ export class HomeAssistantWsApi implements ICredentialType {
 	displayName = 'HomeAssistant WS API';
 	properties: INodeProperties[] = [
 		{
+			displayName: 'Protocol',
+			name: 'protocol',
+			type: 'options',
+			options: [
+				{
+					name: 'wss:// (Secure)',
+					value: 'wss',
+				},
+				{
+					name: 'ws:// (Unsecure)',
+					value: 'ws',
+				},
+			],
+			default: 'wss',
+		},
+		{
 			displayName: 'Host',
 			name: 'host',
 			type: 'string',

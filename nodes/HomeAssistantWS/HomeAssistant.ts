@@ -62,7 +62,7 @@ export class HomeAssistant extends EventEmitter {
 
 	private callbacks: Map<number, (type: MessageType, data: any) => void> = new Map();
 
-	constructor(private host: CredentialInformation, private apiKey: CredentialInformation, private logger: Logger) {
+	constructor(private protocol: CredentialInformation, private host: CredentialInformation, private apiKey: CredentialInformation, private logger: Logger) {
 		super();
 		this.ws = this.get_authenticated_ws();
 	}
@@ -406,11 +406,12 @@ export class HomeAssistant extends EventEmitter {
 
 
 	private get_authenticated_ws(): SocketConnection<WebSocket> {
-		const url = 'ws://' + this.host + '/api/websocket';
+		const url = this.protocol + '://' + this.host + '/api/websocket';
 		const ws = new WebSocket(url, {
 			followRedirects: true,
 		});
 
+		this.logger.info(`connection to ${url}`)
 		const socket = new SocketConnection(ws)
 		ws.on('message', (event: MessageEvent) => {
 			const data = JSON.parse(event.toString());
@@ -543,7 +544,7 @@ export class HomeAssistant extends EventEmitter {
 			id: id,
 			...params
 		})
-		this.logger.info(`send ${id} ${type} ${jsonString} unsafe: ${unsafe}`);
+		this.logger.info(`send ${id} ${type} ${jsonString}`);
 
 		if (unsafe) {
 			return this.ws.get_unsafe().then(ws => {

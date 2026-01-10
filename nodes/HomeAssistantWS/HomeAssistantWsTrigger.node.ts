@@ -170,7 +170,7 @@ export class HomeAssistantWsTrigger implements INodeType {
 		const startConsumer = async () => {
 			running = true;
 			const cred = await this.getCredentials('homeAssistantWsApi');
-			assistant = new HomeAssistant(cred.host, cred.apiKey, this.logger)
+			assistant = new HomeAssistant(cred.protocol, cred.host, cred.apiKey, this.logger)
 
 			await subscribeToEvents();
 

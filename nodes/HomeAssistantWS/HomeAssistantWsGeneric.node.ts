@@ -56,7 +56,7 @@ export class HomeAssistantWsGeneric implements INodeType {
 
 
 		const cred = await this.getCredentials('homeAssistantWsApi');
-		const assistant = new HomeAssistant(cred.host, cred.apiKey, this.logger)
+		const assistant = new HomeAssistant(cred.protocol, cred.host, cred.apiKey, this.logger)
 		const items = this.getInputData();
 
 		let results: INodeExecutionData[][] = [];
