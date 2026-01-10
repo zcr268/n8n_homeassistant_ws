@@ -52,6 +52,8 @@ export class HomeAssistant extends EventEmitter {
 	private reconnectTimeoutId: NodeJS.Timeout | null = null;
 	private isReconnecting = false;
 	private shouldReconnect = true;
+	private hasConnectedOnce = false;
+	private lastConnectionError: Error | null = null;
 
 	// Ping-pong mechanism for connection health
 	private pingIntervalId: NodeJS.Timeout | null = null;
@@ -62,7 +64,7 @@ export class HomeAssistant extends EventEmitter {
 
 	private callbacks: Map<number, (type: MessageType, data: any) => void> = new Map();
 
-	constructor(private host: CredentialInformation, private apiKey: CredentialInformation, private logger: Logger) {
+	constructor(private protocol: CredentialInformation, private host: CredentialInformation, private apiKey: CredentialInformation, private logger: Logger) {
 		super();
 		this.ws = this.get_authenticated_ws();
 	}
@@ -406,11 +408,12 @@ export class HomeAssistant extends EventEmitter {
 
 
 	private get_authenticated_ws(): SocketConnection<WebSocket> {
-		const url = 'ws://' + this.host + '/api/websocket';
+		const url = this.protocol + '://' + this.host + '/api/websocket';
 		const ws = new WebSocket(url, {
 			followRedirects: true,
 		});
 
+		this.logger.info(`connection to ${url}`)
 		const socket = new SocketConnection(ws)
 		ws.on('message', (event: MessageEvent) => {
 			const data = JSON.parse(event.toString());
@@ -427,6 +430,7 @@ export class HomeAssistant extends EventEmitter {
 				this.waitForReady().then(() => {
 					// Only reset reconnection attempts after HA is fully ready
 					this.reconnectAttempts = 0;
+					this.hasConnectedOnce = true;
 					this.emit('connected');
 					// Start ping-pong mechanism
 					this.startPingPong();
@@ -458,11 +462,25 @@ export class HomeAssistant extends EventEmitter {
 
 		ws.on('error', (error: any) => {
 			this.logger.error('WebSocket error', error);
-			// Don't emit error during reconnection - we'll keep trying
-			// Error will be reported if reconnection ultimately fails
-			if (!this.shouldReconnect) {
+			this.lastConnectionError = error;
+
+			// If we haven't connected successfully yet, this is likely a config error
+			// (wrong protocol, invalid host, etc.) - don't retry
+			if (!this.hasConnectedOnce) {
+				this.logger.error('this is the first connect, fail out');
+				this.shouldReconnect = false;
+				socket.error(error)
+				ws.close()
 				this.emit('error', error);
+				//return;
+			} else {
+
+				// After successful connection, only emit if not reconnecting
+				if (!this.shouldReconnect) {
+					this.emit('error', error);
+				}
 			}
+
 		});
 
 		ws.on('close', (code: number, reason: Buffer) => {
@@ -543,7 +561,7 @@ export class HomeAssistant extends EventEmitter {
 			id: id,
 			...params
 		})
-		this.logger.info(`send ${id} ${type} ${jsonString} unsafe: ${unsafe}`);
+		this.logger.info(`send ${id} ${type} ${jsonString}`);
 
 		if (unsafe) {
 			return this.ws.get_unsafe().then(ws => {
@@ -578,7 +596,7 @@ export class HomeAssistant extends EventEmitter {
 			this.logger.error(`Max reconnection attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
 			this.shouldReconnect = false;  // Prevent further attempts
 			this.isReconnecting = false;
-			this.emit('reconnect_failed');
+			this.emit('reconnect_failed', this.lastConnectionError);
 			this.emit('close', 1006, 'Reconnection failed');  // 1006 = abnormal closure
 			return;
 		}

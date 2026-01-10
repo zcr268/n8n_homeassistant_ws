@@ -18,7 +18,7 @@ export async function homeAssistantWsApiTest(
 			message: 'API key is required',
 		})
 	}
-	const assistant = new HomeAssistant(credential.data.host, credential.data.apiKey, this.logger)
+	const assistant = new HomeAssistant(credential.data.protocol, credential.data.host, credential.data.apiKey, this.logger)
 	await assistant.get_states()
 	return Promise.resolve({
 		status: 'OK',
