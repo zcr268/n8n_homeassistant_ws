@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-homeassistantws",
+  "name": "@zcr268/n8n-nodes-homeassistantws",
   "version": "1.0.6",
   "description": "Connect to Home Assistant through WebSockets",
   "keywords": [
