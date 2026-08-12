@@ -48,7 +48,7 @@ export class HomeAssistant extends EventEmitter {
 	private cmd = new CommandCounter();
 	private ws: SocketConnection<WebSocket>;
 	private reconnectAttempts = 0;
-	private maxReconnectAttempts = 10;
+	private maxReconnectAttempts = Infinity;
 	private reconnectTimeoutId: NodeJS.Timeout | null = null;
 	private isReconnecting = false;
 	private shouldReconnect = true;

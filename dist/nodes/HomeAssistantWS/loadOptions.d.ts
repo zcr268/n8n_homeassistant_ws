@@ -1,0 +1,15 @@
+import { ILoadOptionsFunctions, INodeListSearchResult, INodePropertyOptions } from "n8n-workflow";
+export declare function load_component_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_component_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+export declare function load_service_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_service_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+export declare function load_service_domain_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_service_domain_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+export declare function load_entity_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_entity_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+export declare function load_device_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_device_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+export declare function load_trigger_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_trigger_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
+export declare function load_area_options(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]>;
+export declare function search_area_options(this: ILoadOptionsFunctions, filter?: string): Promise<INodeListSearchResult>;
