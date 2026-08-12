@@ -8,3 +8,4 @@ yarn.lock
 examples
 .npmrc
 *.tsbuildinfo
+.vscode/
